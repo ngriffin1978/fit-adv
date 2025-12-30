@@ -5,3 +5,4 @@ __pycache__/
 *.sqlite
 *.parquet
 *.csv
+*.egg-info/

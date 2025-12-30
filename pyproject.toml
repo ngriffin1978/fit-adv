@@ -3,13 +3,14 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "whoop-lab"
-version = "0.0.0"
+name = "fit-adv"
+version = "0.1.0"
 description = "WHOOP data ingestion + reporting"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
   "python-dotenv",
   "pandas",
+  "pandas>=2.0",
   "requests",
 ]
 
@@ -21,4 +22,9 @@ where = ["src"]
 
 [project.scripts]
 fit-adv = "fit_adv.cli:main"
+
+[project.optional-dependencies]
+test = [
+  "pytest>=7",
+]
 

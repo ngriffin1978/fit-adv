@@ -2,6 +2,33 @@ from __future__ import annotations
 
 import pandas as pd
 
+RECOVERY_OUTPUT_COLS = [
+    "recovery_score",
+    "hrv_rmssd_milli",
+    "resting_hr",
+    "spo2_pct",
+    "skin_temp_c",
+    "score_user_calibrating",
+]
+
+SLEEP_OUTPUT_COLS = [
+    "sleep_start",
+    "sleep_end",
+    "nap",
+    "sleep_score_state",
+    "sleep_perf_pct",
+    "sleep_eff_pct",
+    "sleep_consistency_pct",
+    "resp_rate",
+    # stage_* and sleep_needed_* are dynamic; we won’t force those here
+]
+
+def _ensure_columns(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+    for c in cols:
+        if c not in df.columns:
+            df[c] = pd.NA
+    return df
+
 
 def expand_dict_column(df: pd.DataFrame, col: str, prefix: str) -> pd.DataFrame:
     """Expand a column containing dicts into top-level columns with a prefix."""
@@ -251,6 +278,11 @@ def build_daily_from_cycle_recovery_sleep(
         df_daily["sleep_asleep_hours_est"] = (
             df_daily["stage_total_in_bed_time_hours"] - df_daily["stage_total_awake_time_hours"]
         )
+    # Ensure stable schema even when upstream collections are missing
+    df_daily = _ensure_columns(df_daily, RECOVERY_OUTPUT_COLS)
+    df_daily = _ensure_columns(df_daily, SLEEP_OUTPUT_COLS)
 
+	
     return df_daily
+
 

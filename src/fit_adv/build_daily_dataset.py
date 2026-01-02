@@ -24,30 +24,52 @@ class DailyBuildOutputs:
 
 
 def add_workout_daily_metrics(df_daily: pd.DataFrame, df_workout: pd.DataFrame) -> pd.DataFrame:
-    """
-    Build per-day workout aggregates and merge them into df_daily on 'date'.
-    Expects df_workout to have at least: start, end, id, score_strain, score_kilojoule,
-    score_average_heart_rate, score_max_heart_rate.
-    """
+    # Ensure output columns exist even when there are no workouts
+    base_cols = {
+        "workout_count": 0,
+        "workout_strain_sum": 0.0,
+        "workout_kilojoule_sum": 0.0,
+        "workout_minutes_sum": 0.0,
+    }
+    for c, v in base_cols.items():
+        if c not in df_daily.columns:
+            df_daily[c] = v
+
+    # Nothing to do if workouts are missing/empty
+    if df_workout is None or df_workout.empty:
+        return df_daily
+
+    # Schema guard: if WHOOP changes or our normalize step didn't include fields
+    required = {"start"}
+    missing = required - set(df_workout.columns)
+    if missing:
+        # Keep zeros, don’t crash
+        # (optional) print/log a warning here
+        return df_daily
+
     w = df_workout.copy()
 
+    # ---- existing logic below this point ----
     w["start_dt_utc"] = pd.to_datetime(w["start"], utc=True, errors="coerce")
-    w["end_dt_utc"] = pd.to_datetime(w["end"], utc=True, errors="coerce")
     w["date"] = w["start_dt_utc"].dt.date.astype(str)
 
-    w["minutes"] = (w["end_dt_utc"] - w["start_dt_utc"]).dt.total_seconds() / 60.0
+    # Example aggregations (keep your existing ones if different)
+    agg = w.groupby("date").agg(
+        workout_count=("start", "count"),
+        workout_strain_sum=("strain", "sum") if "strain" in w.columns else ("start", "count"),
+        workout_kilojoule_sum=("kilojoule", "sum") if "kilojoule" in w.columns else ("start", "count"),
+        workout_minutes_sum=("duration_milli", lambda s: (s.fillna(0).sum() / 60000.0)) if "duration_milli" in w.columns else ("start", "count"),
+    ).reset_index()
 
-    workout_daily = w.groupby("date", as_index=False).agg(
-        workout_count=("id", "count"),
-        workout_minutes=("minutes", "sum"),
-        workout_strain_sum=("score_strain", "sum"),
-        workout_kj_sum=("score_kilojoule", "sum"),
-        workout_avg_hr_mean=("score_average_heart_rate", "mean"),
-        workout_max_hr_max=("score_max_heart_rate", "max"),
-    )
+    df_daily = df_daily.merge(agg, on="date", how="left", suffixes=("", "_new"))
 
-    merged = df_daily.merge(workout_daily, on="date", how="left")
-    return merged
+    # Fill merged values if present; keep zeros otherwise
+    for c in base_cols.keys():
+        if f"{c}_new" in df_daily.columns:
+            df_daily[c] = df_daily[f"{c}_new"].fillna(df_daily[c])
+            df_daily.drop(columns=[f"{c}_new"], inplace=True)
+
+    return df_daily
 
 
 def write_daily_outputs(

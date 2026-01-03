@@ -1,6 +1,29 @@
 import pytest
+import requests_mock
 
 from fit_adv.io_whoop_api import WHOOP_API_BASE, WhoopApiError, fetch_collection
+
+
+def test_fetch_collection_repeated_nexttoken_guard_trips(requests_mock: requests_mock.Mocker) -> None:
+    path = "/cycle"
+    url = f"{WHOOP_API_BASE}{path}"
+
+    # Always returns the same nextToken, simulating a stuck pagination loop
+    def responder(request, context):
+        return {"records": [{"id": "x"}], "nextToken": "STUCK"}
+
+    requests_mock.get(url, json=responder)
+
+    with pytest.raises(WhoopApiError) as e:
+        fetch_collection(
+            access_token="token",
+            path=path,
+            since="2026-01-01T00:00:00Z",
+            limit=25,
+            max_pages=200,
+        )
+
+    assert "stuck loop" in str(e.value) or "repeated nextToken" in str(e.value)
 
 
 def test_fetch_collection_single_page(requests_mock):

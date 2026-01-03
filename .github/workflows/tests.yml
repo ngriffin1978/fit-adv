@@ -34,6 +34,7 @@ jobs:
           python -m pip list | grep -E "pytest|requests-mock|requests" || true
           python -m pip show requests-mock || true
           pytest --fixtures -q | grep requests_mock || true
+          python -m pip install -e ".[test]" -v
 
       - name: Run tests
         run: |

@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
-
+from typing import Iterable
 
 @dataclass(frozen=True)
 class RawWhoopPaths:
@@ -13,6 +13,32 @@ class RawWhoopPaths:
     workout: Path
     cycle: Path
 
+def _all_files(raw_dir: Path, prefix: str) -> list[Path]:
+    files = sorted(raw_dir.glob(f"{prefix}_*.json"))
+    if not files:
+        raise FileNotFoundError(f"No {prefix}_*.json files found in {raw_dir}")
+    return files
+
+
+def load_all_raw_records(raw_dir: Path) -> tuple[list[Mapping[str, Any]], list[Mapping[str, Any]], list[Mapping[str, Any]], list[Mapping[str, Any]]]:
+    """
+    Load *all* raw records from raw_dir by concatenating all prefix_*.json files.
+    Returns: (recovery, sleep, workout, cycle)
+    """
+    if not raw_dir.exists():
+        raise FileNotFoundError(f"raw_dir not found: {raw_dir}")
+
+    def load(prefix: str) -> list[Mapping[str, Any]]:
+        out: list[Mapping[str, Any]] = []
+        for p in _all_files(raw_dir, prefix):
+            out.extend(read_json_list(p))
+        return out
+
+    recovery = load("recovery")
+    sleep = load("sleep")
+    workout = load("workout")
+    cycle = load("cycle")
+    return recovery, sleep, workout, cycle
 
 def _latest_file(raw_dir: Path, prefix: str) -> Path:
     files = sorted(raw_dir.glob(f"{prefix}_*.json"))

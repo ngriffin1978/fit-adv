@@ -157,12 +157,18 @@ def fetch_collection(
     access_token: str,
     path: str,
     since: Optional[str] = None,
+    until: Optional[str] = None,
     limit: int = 25,
+    max_pages: Optional[int] = 200,
 ) -> List[Dict[str, Any]]:
     """
     Fetch a WHOOP V2 "collection" endpoint with pagination via nextToken.
 
     since: ISO-8601 timestamp string used as the v2 'start' query param.
+    until: ISO-8601 timestamp string used as the v2 'end' query param.
+
+    max_pages: Safety cap to prevent infinite pagination loops due to API/schema bugs.
+               Set to None to disable.
     """
     limit = max(1, min(int(limit), 25))
 
@@ -172,10 +178,23 @@ def fetch_collection(
     results: List[Dict[str, Any]] = []
     next_token: Optional[str] = None
 
+    pages_seen = 0
+    seen_tokens: set[str] = set()
+
     while True:
+        pages_seen += 1
+        if max_pages is not None and pages_seen > max_pages:
+            raise WhoopApiError(
+                "Pagination exceeded max_pages guard. "
+                f"path={path!r} since={since!r} until={until!r} limit={limit} "
+                f"pages_seen={pages_seen} max_pages={max_pages} last_nextToken={next_token!r}"
+            )
+
         params: Dict[str, Any] = {"limit": limit}
         if since:
             params["start"] = since
+        if until:
+            params["end"] = until
         if next_token:
             params["nextToken"] = next_token
 
@@ -186,9 +205,18 @@ def fetch_collection(
         payload = r.json()
         results.extend(payload.get("records", []))
 
+        # WHOOP v2 uses nextToken (camelCase); keep next_token fallback for extra tolerance
         next_token = payload.get("nextToken") or payload.get("next_token") or ""
         if not next_token:
             break
+
+        # Extra hardening: detect "stuck token" loops immediately
+        if next_token in seen_tokens:
+            raise WhoopApiError(
+                "Pagination repeated nextToken (stuck loop). "
+                f"path={path!r} nextToken={next_token!r} since={since!r} until={until!r} limit={limit}"
+            )
+        seen_tokens.add(next_token)
 
     return results
 
@@ -211,4 +239,3 @@ def get_whoop_env() -> Tuple[str, str, str]:
         raise WhoopApiError(f"Missing env vars: {', '.join(missing)}")
 
     return cid.strip(), csecret.strip(), rtoken.strip()
-
